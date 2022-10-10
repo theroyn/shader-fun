@@ -4,24 +4,24 @@
 #define ATIME (iTime * 0.2)
 //#define LOOKFROM vec3(sin(iTime)*6., 2., 3.+cos(iTime)*6.)
 #define LOOKAT vec3(-2.,1., -8.)
-#define LOOKFROM ((LOOKAT) + 4.*vec3(cos(ATIME * 2.*PI), 1, sin(-ATIME * 2.*PI)))
-//#define LOOKFROM vec3(0., 1.2, 2.)
+//#define LOOKFROM ((LOOKAT) + 4.*vec3(cos(ATIME * 2.*PI), 1, sin(-ATIME * 2.*PI)))
+#define LOOKFROM vec3(0., 2.8, 2.)
 
 struct Sphere
 {
-    vec3 p;
+    vec4 p;
     float r;
 };
 
 struct Torus
 {
-    vec3 p;
+    vec4 p;
     vec2 t;
 };
 
 struct Box
 {
-    vec3 center;
+    vec4 center;
     vec3 dims;
 };
 
@@ -33,19 +33,19 @@ struct Plane
 
 float box_sdf (vec3 x, Box c)
 {
-    vec3 p=x - c.center;
+    vec3 p=x - c.center.xyz;
     vec3 q=abs (p) - c.dims;
     return length (max (q, 0.0)) + min (max (q.x, max (q.y, q.z)), 0.0);
 }
 
 float sphere_sdf (vec3 x, in Sphere s)
 {
-    return length (x - s.p) - s.r;
+    return length (x - s.p.xyz) - s.r;
 }
 
 float sdTorus (vec3 x, Torus tor)
 {
-    vec3 p=x - tor.p;
+    vec3 p=x - tor.p.xyz;
     vec2 q=vec2 (length (p.xz) - tor.t.x, p.y);
     return length (q) - tor.t.y;
 }
@@ -62,15 +62,38 @@ vec2 opU (vec2 a, vec2 b)
 
 vec2 get_min_dist (in vec3 p)
 {
+   /** mat4 trans = mat4(
+    1, 0, 0, 0,
+    0, 1, 0, 0,
+    0, 0, 1, 0,
+    0.5, 0., 0.,);*/
+    mat4 trans = mat4(1.); // I
+    trans[3] = vec4(1.5, 2., 0., 1.);
+    float rot_theta = ATIME;
+    mat4 rot_x_trans = mat4(1.);
+    rot_x_trans[1][1] = cos(rot_theta);
+    rot_x_trans[1][2] = sin(rot_theta);
+    rot_x_trans[2][1] = -sin(rot_theta);
+    rot_x_trans[2][2] = cos(rot_theta);
+    mat4 rot_y_trans = mat4(1.);
+    rot_x_trans[0][0] = cos(rot_theta);
+    rot_x_trans[0][2] = -sin(rot_theta);
+    rot_x_trans[2][0] = sin(rot_theta);
+    rot_x_trans[2][2] = cos(rot_theta);
+    mat4 trans_t = inverse(trans);
+    mat4 rot_x_trans_t = inverse(rot_x_trans);
+    mat4 rot_y_trans_t = inverse(rot_y_trans);
     //Sphere s1 = Sphere(vec3(sin(iTime)*2.,0., -6.-cos(iTime)*2.), .5);
     //Torus tor1 = Torus(vec3(3, sin(iTime)*6., -6), vec2(1.85,0.3));
-    Sphere s1=Sphere (LOOKAT + vec3 (0., -1., 0.), .8);
-    Torus tor1=Torus (vec3 (3, 1., -6), vec2 (1.85, 0.1));
-    Box box=Box (vec3 (0.8, 0, -6), vec3 (0.2, 0.4, 0.2));
+    Sphere s1=Sphere (vec4(LOOKAT + vec3 (0., 0., 0.), 1.), .8);
+   // s1.p = trans * s1.p;
+    Torus tor1=Torus (vec4 (3, 1., -6, 1.), vec2 (1.85, 0.1));
+   // tor1.p = rot_y_trans * tor1.p;
+    Box box=Box (vec4 (0.8, 0, -6, 1), vec3 (0.2, 0.4, 0.2));
     Plane plane=Plane (vec3 (0, -2, 0), normalize (vec3 (0, 1, 0.2)));
 
     vec2 sdf1=vec2 (sphere_sdf (p, s1), 10.);
-    vec2 sdf2=vec2 (sdTorus (p, tor1), 20.);
+    vec2 sdf2=vec2 (sdTorus ((trans_t*vec4(p, 1.)).xyz, tor1), 20.);
     vec2 sdf3=vec2 (sdPlane (p, plane), 30.);
     vec2 sdf4=vec2 (box_sdf (p, box), 40.);
     vec2 sdf=opU (sdf4, opU (sdf3, opU (sdf1, sdf2)));
