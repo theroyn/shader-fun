@@ -3,8 +3,8 @@
 #define PI 3.14159265359
 #define ATIME (iTime * 0.2)
 #define LOOKAT vec3(-2., 1., -8.)
-#define LOOKFROM ((LOOKAT) + 6.*vec3(cos(ATIME * 2.*PI), 1, sin(-ATIME * 2.*PI)))
-//#define LOOKFROM vec3(1., 2.8, 5.)
+//#define LOOKFROM ((LOOKAT) + 6.*vec3(cos(ATIME * 2.*PI), 1, sin(-ATIME * 2.*PI)))
+#define LOOKFROM vec3(-0., 4., -0.5)
 
 struct Sphere
 {
@@ -56,6 +56,11 @@ vec2 opU(vec2 a, vec2 b)
     return a.x < b.x ? a : b;
 }
 
+vec2 opSubtraction(vec2 a, vec2 b)
+{
+    return -a.x > b.x ? vec2(-a.x, a.y) : b;
+}
+
 mat4 translate(vec3 t)
 {
     mat4 trans=mat4(1.);
@@ -64,9 +69,9 @@ mat4 translate(vec3 t)
     return trans;
 }
 
-mat3 RotX(float theta)
+mat4 RotX(float theta)
 {
-    mat3 trans=mat3(1.);
+    mat4 trans=mat4(1.);
     trans[1][1]=cos(theta);
     trans[1][2]=sin(theta);
     trans[2][1]=-sin(theta);
@@ -75,9 +80,9 @@ mat3 RotX(float theta)
     return transpose(trans);
 }
 
-mat3 RotY(float theta)
+mat4 RotY(float theta)
 {
-    mat3 trans=mat3(1.);
+    mat4 trans=mat4(1.);
     trans[0][0]=cos(theta);
     trans[0][2]=-sin(theta);
     trans[2][0]=sin(theta);
@@ -86,9 +91,9 @@ mat3 RotY(float theta)
     return transpose(trans);
 }
 
-mat3 RotZ(float theta)
+mat4 RotZ(float theta)
 {
-    mat3 trans=mat3(1.);
+    mat4 trans=mat4(1.);
     trans[0][0]=cos(theta);
     trans[0][1]=sin(theta);
     trans[1][0]=-sin(theta);
@@ -99,27 +104,37 @@ mat3 RotZ(float theta)
 
 vec2 get_min_dist(in vec3 p)
 {
-    mat4 trans=translate(vec3(2.5, 2., 0.));
     float rot_theta=ATIME;
-    mat3 rot_x_trans=RotX(rot_theta);
-    mat3 rot_y_trans=RotY(rot_theta);
-    mat3 rot_z_trans=RotZ(rot_theta * 8.);
+    mat4 rot_x_trans=RotX(rot_theta);
+    mat4 rot_y_trans=RotY(rot_theta);
+    mat4 rot_z_trans=RotZ(rot_theta * 8.);
     float scale_factor=2.;
     float scale_factor_t=1. / scale_factor;
 
     Sphere s1=Sphere(.8);
     Sphere s2=Sphere(.8);
+    Sphere s3=Sphere(.4);
 
     Torus tor1=Torus(vec3(0, 0, 0), vec2(1.85, 0.1));
     Box box=Box(vec3(0.2, 0.4, 0.2));
     Plane plane=Plane(vec3(0, -2, 0), normalize(vec3(0, 1, 0.2)));
 
-    vec2 sdf1=vec2(sdPlane(p, plane), 30.);
-    vec2 sdf2=vec2(sphere_sdf(RotX(iTime) * (translate(LOOKAT + vec3(0., -1., 0.)) * vec4(p, 1)).xyz, s1), 10.);
-    vec2 sdf3=vec2(sphere_sdf(p, s2), 51.8);
-    vec2 sdf4=vec2(sdTorus(rot_z_trans * (translate(vec3(1., 2., -2.)) * vec4(p, 1)).xyz, tor1), 20.);
-    vec2 sdf5=vec2(scale_factor * box_sdf(scale_factor_t * (translate(vec3(1., 2., -2)) * vec4(p, 1.)).xyz, box), 40.);
-    vec2 sdf=opU(sdf5, opU(sdf4, opU(sdf3, opU(sdf1, sdf2))));
+    //vec2 tmpP = p;
+  //  p = 
+    mat4 sphere_trans=RotZ(rot_theta * 8.) * translate(vec3(2.5, 2., 0.));
+
+    vec2 tmp=vec2(sphere_sdf((translate(LOOKAT + vec3(0.)) * vec4(p, 1)).xyz, s1), 10.);
+    vec2 sdf=opSubtraction(vec2(sphere_sdf((translate(LOOKAT + vec3(0, 0.8, 0.5)) * vec4(p, 1)).xyz, s3), 32.), tmp);
+
+    tmp=vec2(sphere_sdf(p, s2), 51.8);
+    sdf=opU(tmp, sdf);
+    tmp=vec2(sdPlane(p, plane), 30.);
+    sdf=opU(tmp, sdf);
+    tmp=vec2(sdTorus((rot_z_trans * translate(vec3(1., 2., -2.)) * vec4(p, 1)).xyz, tor1), 20.);
+    sdf=opU(tmp, sdf);
+    tmp=vec2(scale_factor * box_sdf(scale_factor_t * (translate(vec3(1., 2., -2)) * vec4(p, 1.)).xyz, box), 40.);
+    sdf=opU(tmp, sdf);
+    //vec2 sdf= opU(sdf6, opU(sdf5, opU (sdf4, opU (sdf3,  opSubtraction(sdf2, sdf1)))));
 
     return sdf;
 }
@@ -207,7 +222,7 @@ float deg_to_rad(float d)
 void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     // camera
-    float vfov=90.;
+    float vfov=60.;
     float theta=deg_to_rad(vfov);
     float z_ratio=tan(theta / 2.);
     float ar=iResolution.x / iResolution.y; // ==16:9
