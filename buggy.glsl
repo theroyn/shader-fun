@@ -2,26 +2,23 @@
 #define MAX_DIST 200.
 #define PI 3.14159265359
 #define ATIME (iTime * 0.2)
-//#define LOOKFROM vec3(sin(iTime)*6., 2., 3.+cos(iTime)*6.)
-#define LOOKAT vec3(-2.,1., -8.)
-//#define LOOKFROM ((LOOKAT) + 4.*vec3(cos(ATIME * 2.*PI), 1, sin(-ATIME * 2.*PI)))
-#define LOOKFROM vec3(0., 2.8, 2.)
+#define LOOKAT vec3(-2., 1., -8.)
+#define LOOKFROM ((LOOKAT) + 6.*vec3(cos(ATIME * 2.*PI), 1, sin(-ATIME * 2.*PI)))
+//#define LOOKFROM vec3(1., 2.8, 5.)
 
 struct Sphere
 {
-    vec4 p;
     float r;
 };
 
 struct Torus
 {
-    vec4 p;
+    vec3 p;
     vec2 t;
 };
 
 struct Box
 {
-    vec4 center;
     vec3 dims;
 };
 
@@ -31,16 +28,15 @@ struct Plane
     vec3 n;
 };
 
-float box_sdf (vec3 x, Box c)
+float box_sdf (vec3 p, Box c)
 {
-    vec3 p=x - c.center.xyz;
     vec3 q=abs (p) - c.dims;
     return length (max (q, 0.0)) + min (max (q.x, max (q.y, q.z)), 0.0);
 }
 
 float sphere_sdf (vec3 x, in Sphere s)
 {
-    return length (x - s.p.xyz) - s.r;
+    return length (x) - s.r;
 }
 
 float sdTorus (vec3 x, Torus tor)
@@ -60,51 +56,77 @@ vec2 opU (vec2 a, vec2 b)
     return a.x < b.x ? a : b;
 }
 
+mat4 translate (vec3 t)
+{
+    mat4 trans=mat4 (1.);
+    trans[3]=vec4 (-t, 1.);
+
+    return trans;
+}
+
+mat3 RotX (float theta)
+{
+    mat3 trans=mat3 (1.);
+    trans[1][1]=cos (theta);
+    trans[1][2]=sin (theta);
+    trans[2][1]=-sin (theta);
+    trans[2][2]=cos (theta);
+
+    return transpose (trans);
+}
+
+mat3 RotY (float theta)
+{
+    mat3 trans=mat3 (1.);
+    trans[0][0]=cos (theta);
+    trans[0][2]=-sin (theta);
+    trans[2][0]=sin (theta);
+    trans[2][2]=cos (theta);
+
+    return transpose (trans);
+}
+
+mat3 RotZ (float theta)
+{
+    mat3 trans=mat3 (1.);
+    trans[0][0]=cos (theta);
+    trans[0][1]=sin (theta);
+    trans[1][0]=-sin (theta);
+    trans[1][1]=cos (theta);
+
+    return transpose (trans);
+}
+
 vec2 get_min_dist (in vec3 p)
 {
-   /** mat4 trans = mat4(
-    1, 0, 0, 0,
-    0, 1, 0, 0,
-    0, 0, 1, 0,
-    0.5, 0., 0.,);*/
-    mat4 trans = mat4(1.); // I
-    trans[3] = vec4(1.5, 2., 0., 1.);
-    float rot_theta = ATIME;
-    mat4 rot_x_trans = mat4(1.);
-    rot_x_trans[1][1] = cos(rot_theta);
-    rot_x_trans[1][2] = sin(rot_theta);
-    rot_x_trans[2][1] = -sin(rot_theta);
-    rot_x_trans[2][2] = cos(rot_theta);
-    mat4 rot_y_trans = mat4(1.);
-    rot_x_trans[0][0] = cos(rot_theta);
-    rot_x_trans[0][2] = -sin(rot_theta);
-    rot_x_trans[2][0] = sin(rot_theta);
-    rot_x_trans[2][2] = cos(rot_theta);
-    mat4 trans_t = inverse(trans);
-    mat4 rot_x_trans_t = inverse(rot_x_trans);
-    mat4 rot_y_trans_t = inverse(rot_y_trans);
-    //Sphere s1 = Sphere(vec3(sin(iTime)*2.,0., -6.-cos(iTime)*2.), .5);
-    //Torus tor1 = Torus(vec3(3, sin(iTime)*6., -6), vec2(1.85,0.3));
-    Sphere s1=Sphere (vec4(LOOKAT + vec3 (0., 0., 0.), 1.), .8);
-   // s1.p = trans * s1.p;
-    Torus tor1=Torus (vec4 (3, 1., -6, 1.), vec2 (1.85, 0.1));
-   // tor1.p = rot_y_trans * tor1.p;
-    Box box=Box (vec4 (0.8, 0, -6, 1), vec3 (0.2, 0.4, 0.2));
+    mat4 trans=translate (vec3 (2.5, 2., 0.));
+    float rot_theta=ATIME;
+    mat3 rot_x_trans=RotX (rot_theta);
+    mat3 rot_y_trans=RotY (rot_theta);
+    mat3 rot_z_trans=RotZ (rot_theta * 8.);
+    float scale_factor=2.;
+    float scale_factor_t=1. / scale_factor;
+
+    Sphere s1=Sphere (.8);
+    Sphere s2=Sphere (.8);
+
+    Torus tor1=Torus (vec3 (0, 0, 0), vec2 (1.85, 0.1));
+    Box box=Box (vec3 (0.2, 0.4, 0.2));
     Plane plane=Plane (vec3 (0, -2, 0), normalize (vec3 (0, 1, 0.2)));
 
-    vec2 sdf1=vec2 (sphere_sdf (p, s1), 10.);
-    vec2 sdf2=vec2 (sdTorus ((trans_t*vec4(p, 1.)).xyz, tor1), 20.);
-    vec2 sdf3=vec2 (sdPlane (p, plane), 30.);
-    vec2 sdf4=vec2 (box_sdf (p, box), 40.);
-    vec2 sdf=opU (sdf4, opU (sdf3, opU (sdf1, sdf2)));
-    //float sdf = min(sdf1, sdf2);
+    vec2 sdf1=vec2 (sdPlane (p, plane), 30.);
+    vec2 sdf2=vec2 (sphere_sdf (RotX (iTime) * (translate (LOOKAT + vec3 (0., -1., 0.)) * vec4 (p, 1)).xyz, s1), 10.);
+    vec2 sdf3=vec2 (sphere_sdf (p, s2), 51.8);
+    vec2 sdf4=vec2 (sdTorus (rot_z_trans * (translate (vec3 (1., 2., -2.)) * vec4 (p, 1)).xyz, tor1), 20.);
+    vec2 sdf5=vec2 (scale_factor * box_sdf (scale_factor_t * (translate (vec3 (1., 2., -2)) * vec4 (p, 1.)).xyz, box), 40.);
+    vec2 sdf=opU (sdf5, opU (sdf4, opU (sdf3, opU (sdf1, sdf2))));
+
     return sdf;
 }
 
 bool march (in vec3 ray_origin, in vec3 ray_dir, out vec2 t)
 {
     int steps=200;
-   // vec3 curr = ray_origin;
     float curr=0.;
     for(int i=0;i < steps && curr < MAX_DIST;++i)
     {
@@ -133,7 +155,7 @@ vec3 GetNormal (vec3 p)
 
 vec3 calcNormal (in vec3 p)
 {
-    const float eps=0.0001; // or some other value
+    const float eps=0.001;
     const vec2 h=vec2 (eps, 0);
     return normalize (vec3 (get_min_dist (p + h.xyy).x - get_min_dist (p - h.xyy).x, get_min_dist (p + h.yxy).x - get_min_dist (p - h.yxy).x, get_min_dist (p + h.yyx).x - get_min_dist (p - h.yyx).x));
 }
