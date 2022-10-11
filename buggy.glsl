@@ -2,9 +2,11 @@
 #define MAX_DIST 200.
 #define PI 3.14159265359
 #define ATIME (iTime * 0.2)
+#define VFOV 50.
+#define AN(X) sin(iTime * (X))
 #define LOOKAT vec3(-2., 1., -8.)
 //#define LOOKFROM ((LOOKAT) + 6.*vec3(cos(ATIME * 2.*PI), 1, sin(-ATIME * 2.*PI)))
-#define LOOKFROM vec3(-0., 4., -0.5)
+#define LOOKFROM vec3(-1.8, 3., -4.8)
 
 struct Sphere
 {
@@ -51,9 +53,22 @@ float sdPlane(in vec3 x, in Plane plane)
     return dot(x - plane.p, plane.n);
 }
 
+float sdCappedTorus(in vec3 p, in vec2 sc, in float ra, in float rb)
+{
+    p.x=abs(p.x);
+    float k=(sc.y * p.x > sc.x * p.y) ? dot(p.xy, sc) : length(p.xy);
+    return sqrt(dot(p, p) + ra * ra - 2.0 * ra * k) - rb;
+}
+
 vec2 opU(vec2 a, vec2 b)
 {
     return a.x < b.x ? a : b;
+}
+
+vec2 opSmoothUnion(vec2 d1, vec2 d2, float k)
+{
+    vec2 h=clamp(0.5 + 0.5 * (d2 - d1) / k, 0.0, 1.0);
+    return mix(d2, d1, h) - k * h * (1.0 - h);
 }
 
 vec2 opSubtraction(vec2 a, vec2 b)
@@ -102,6 +117,11 @@ mat4 RotZ(float theta)
     return transpose(trans);
 }
 
+vec3 transform(in mat4 trans, in vec3 p)
+{
+    return (trans * vec4(p, 1.)).xyz;
+}
+
 vec2 get_min_dist(in vec3 p)
 {
     float rot_theta=ATIME;
@@ -112,22 +132,37 @@ vec2 get_min_dist(in vec3 p)
     float scale_factor_t=1. / scale_factor;
 
     Sphere s1=Sphere(.8);
-    Sphere s2=Sphere(.8);
-    Sphere s3=Sphere(.4);
+   // Sphere s2=Sphere(.8);
+    Sphere s_eye=Sphere(.3);
 
     Torus tor1=Torus(vec3(0, 0, 0), vec2(1.85, 0.1));
     Box box=Box(vec3(0.2, 0.4, 0.2));
     Plane plane=Plane(vec3(0, -2, 0), normalize(vec3(0, 1, 0.2)));
 
-    //vec2 tmpP = p;
-  //  p = 
-    mat4 sphere_trans=RotZ(rot_theta * 8.) * translate(vec3(2.5, 2., 0.));
+    mat4 head_trans=RotZ(iTime) * translate(LOOKAT + vec3((1.), 0, -2.));
+    mat4 eye_socket1_trans=translate(vec3(-0.4, 0.4, 0.8)) * head_trans;
+    mat4 eye_socket2_trans=translate(vec3(0.4, 0.4, 0.8)) * head_trans;
+    mat4 eye2_trans=translate(vec3(0.4, 0.4, 0.8)) * head_trans;
+    mat4 smile_trans=RotX(PI) * translate(vec3(0., 0., 0.7)) * head_trans;
 
-    vec2 tmp=vec2(sphere_sdf((translate(LOOKAT + vec3(0.)) * vec4(p, 1)).xyz, s1), 10.);
-    vec2 sdf=opSubtraction(vec2(sphere_sdf((translate(LOOKAT + vec3(0, 0.8, 0.5)) * vec4(p, 1)).xyz, s3), 32.), tmp);
-
-    tmp=vec2(sphere_sdf(p, s2), 51.8);
+    vec2 tmp=vec2(sphere_sdf(transform(eye_socket1_trans, p), s_eye), 10.);
+    vec2 sdf=opSubtraction(tmp, vec2(sphere_sdf(transform(head_trans, p), s1), 10.));
+    tmp=vec2(sphere_sdf(transform(eye_socket2_trans, p), s_eye), 10.);
+    sdf=opSubtraction(tmp, sdf);
+    tmp=vec2(sdCappedTorus(transform(smile_trans, p), vec2(sin(1.1), cos(1.1)), 0.4, 0.05), 15. + sin(iTime) * .2);
+    //sdf=opU(tmp, sdf);
+    sdf=opSmoothUnion(tmp, sdf, 0.07);
+    tmp=vec2(sphere_sdf(transform(translate(vec3(-.1, -.1, -.3)) * eye_socket2_trans, p), Sphere(s_eye.r * .5)), 31.);
+    sdf=opSmoothUnion(tmp, sdf, 0.05);
+    //sdf=opU(tmp, sdf);
+    tmp=vec2(sphere_sdf(transform(translate(vec3(.1, -.1, -.3)) * eye_socket1_trans, p), Sphere(s_eye.r * .5)), 31.);
+    sdf=opSmoothUnion(tmp, sdf, 0.05);
+   // sdf=opU(tmp, sdf);
+    tmp=vec2(sphere_sdf(transform(translate(vec3(-0.04, 0.05, -0.02)) * translate(vec3(.1, -.1, -.2)) * eye_socket1_trans, p), Sphere(s_eye.r * .2)), 31.);
     sdf=opU(tmp, sdf);
+
+   // tmp=vec2(sphere_sdf(p, s2), 51.8);
+  //  sdf=opU(tmp, sdf);
     tmp=vec2(sdPlane(p, plane), 30.);
     sdf=opU(tmp, sdf);
     tmp=vec2(sdTorus((rot_z_trans * translate(vec3(1., 2., -2.)) * vec4(p, 1)).xyz, tor1), 20.);
@@ -222,7 +257,7 @@ float deg_to_rad(float d)
 void mainImage(out vec4 fragColor, in vec2 fragCoord)
 {
     // camera
-    float vfov=60.;
+    float vfov=VFOV;
     float theta=deg_to_rad(vfov);
     float z_ratio=tan(theta / 2.);
     float ar=iResolution.x / iResolution.y; // ==16:9
